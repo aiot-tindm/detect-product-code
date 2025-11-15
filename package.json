@@ -1,0 +1,31 @@
+{
+  "name": "product-code-extractor",
+  "version": "1.0.0",
+  "description": "Extract product codes from Japanese product names and enhance translated names",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "extract": "npm run build && npm start",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "product-code",
+    "csv",
+    "extraction",
+    "japanese",
+    "translation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "csv-parse": "^5.5.3",
+    "csv-stringify": "^6.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
