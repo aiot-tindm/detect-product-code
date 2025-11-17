@@ -6,19 +6,53 @@ You are a TypeScript function that extracts product codes from Japanese product 
 Extract alphanumeric product codes from the `original_name` column and append them to the `translated_name` to make product names more unique and identifiable.
 
 ## Pattern Analysis
-Product codes in the original names follow these patterns:
-- Format: Usually alphanumeric with mix of numbers and letters
-- Position: Typically embedded within the Japanese product description
-- Examples:
-  - `3.1 Phillip Lim・3.1 Phillip Lim ブーツ ゴールド 2020324D0039・ブーツその他・ゴールド・EU38(24.5cm位)` → Extract: `2020324D0039`
-  - `BALLY・BALLY バリー パンプス 紺 EU37(23.5cm位) 4104125G0002・パンプス・紺・EU37(23.5cm位)` → Extract: `4104125G0002`
-  - `BALLY・BALLY バリー サンダル 黒x白(ボーダー) 4104125O0040・サンダル・ミュール・黒x白(ボーダー)・EU38(24.5cm位)` → Extract: `4104125O0040`
+Product codes in the original names follow these 4 distinct patterns:
+
+### Pattern 1: Code After Color
+- `3.1 Phillip Lim・3.1 Phillip Lim ブーツ ゴールド 2020324D0039・ブーツその他・ゴールド・EU38(24.5cm位)` → Extract: `2020324D0039`
+- `BALLY・BALLY バリー サンダル 黒x白(ボーダー) 4104125O0040・サンダル・ミュール・黒x白(ボーダー)・EU38(24.5cm位)` → Extract: `4104125O0040`
+
+### Pattern 2: Code After Dash
+- `3.1 Phillip Lim・3.1 Phillip Lim クラッチバッグ - 2020324A0037・クラッチバッグ・-` → Extract: `2020324A0037`
+- `A.P.C.・A.P.C. アーペーセー ショルダーバッグ 黒 - 0272225S0073・ショルダーバッグ・ポシェット・黒・-` → Extract: `0272225S0073`
+
+### Pattern 3: Code After Size Information ⚠️ IMPORTANT
+- `BALLY・BALLY バリー パンプス 紺 EU37(23.5cm位) 4104125G0002・パンプス・紺・EU37(23.5cm位)` → Extract: `4104125G0002`
+- `A.P.C.・A.P.C. アーペーセー ブーツ 黒 EU36(22.5cm位) 0272224O0031・ブーツその他・黒・EU36(22.5cm位)` → Extract: `0272224O0031`
+- `Burberry・BURBERRY バーバリー スニーカー EU35(21.5cm位) 4119224D0117・スニーカー・ベージュx黒( ...・EU35(21.5cm位)` → Extract: `4119224D0117`
+
+### Pattern 4: Model Number from Description Field
+Extract model numbers (型番) from the description field:
+
+**Example 1:**
+```
+Description: "【型番】4M00160"
+Extract: 4M00160
+```
+
+**Example 2:**
+```
+Description: "【型番】\nクレドール　シグノ\nGSWE982"
+Extract: GSWE982
+```
+
+**Pattern**: Look for `【型番】` followed by the model number, which may appear on the same line or subsequent lines.
 
 ## Code Pattern Recognition
-- Codes are typically 10-12 characters long
-- Mix of numbers and uppercase letters
-- Often appear before product category descriptions (・ブーツその他・, ・パンプス・, ・サンダル・)
-- Usually positioned after size/color information in Japanese
+
+### Patterns 1-3: Extract from `original_name` field
+- **Format**: Exactly 12 characters: `[7 digits][1 uppercase letter][4 digits]`
+- Example format: `2020324D0039`, `4104125G0002`, `0272224O0031`
+- Codes always appear in the second segment (between first and second ・ separator)
+- Position varies based on 3 distinct patterns:
+  1. **After color**: `[Product] [Color] [CODE]・`
+  2. **After dash**: `[Product] - [CODE]・`
+  3. **After size**: `[Product] [Color] EU##(...) [CODE]・` ⚠️ Important pattern
+
+### Pattern 4: Extract from `description` field
+- **Format**: Variable length alphanumeric model numbers
+- Example format: `4M00160`, `GSWE982`
+- Located after `【型番】` marker in description text
 
 ## Function Specification
 
@@ -51,10 +85,34 @@ function extractAndAppendProductCode(record: ProductRecord): ProductRecord {
 - With code: `"BALLY bal 跟鞋 海軍藍 二手 - 4104125G0002"`
 
 ## Regex Strategy
-Focus on patterns that:
-1. Are 8-15 characters long
-2. Contain both letters and numbers
-3. Appear in strategic positions within Japanese product descriptions
-4. Are likely unique product identifiers rather than sizes/measurements
+
+### For original_name (Patterns 1-3):
+Extract codes matching ALL of these criteria:
+1. Exactly 12 characters long
+2. Format: `[7 digits][1 uppercase letter][4 digits]`
+3. Appear in the second segment (between first and second ・ separator)
+4. Follow one of the 3 patterns above
+
+**Recommended extraction order**:
+1. Check Pattern 3 first (most specific - after size like `EU##(...)`)
+2. Check Pattern 2 (after dash `-`)
+3. Check Pattern 1 (after color)
+
+**Combined regex pattern for original_name**:
+```
+(?:EU\d+[^)]*\))\s+(\d{7}[A-Z]\d{4})・|  # Pattern 3: After size
+-\s+(\d{7}[A-Z]\d{4})・|                 # Pattern 2: After dash
+\s+(\d{7}[A-Z]\d{4})・                   # Pattern 1: After color
+```
+
+### For description (Pattern 4):
+Extract model number after `【型番】` marker:
+
+**Regex pattern for description**:
+```
+【型番】[^\n]*?\n?([A-Z0-9]+)
+```
+
+This captures alphanumeric model numbers that appear after the 型番 marker, potentially on the next line.
 
 The goal is to reduce duplicate entries in `translated_name` by making each product uniquely identifiable through its extracted product code.
