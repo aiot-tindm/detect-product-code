@@ -4,7 +4,11 @@
 2025-11-17
 
 ## Summary
-After comprehensive analysis of the `original_name` column in the dataset (16,811 records), I have identified **4 distinct patterns** for product code extraction, including **1 MISSING pattern** that is not currently covered.
+After comprehensive analysis of the dataset (16,811 records), I have identified **4 distinct patterns** for product code extraction:
+- **Patterns 1-3**: Extract from `original_name` field
+- **Pattern 4**: Extract from `description` field
+
+Including **1 MISSING pattern** (Pattern 3) that was not previously covered.
 
 ## Product Code Format
 All product codes follow a consistent format:
@@ -73,18 +77,25 @@ Burberry・BURBERRY バーバリー スニーカー EU35(21.5cm位) 4119224D0117
 
 ---
 
-### Pattern 4: Code After Product Type (No Color, No Dash) ✅
-**Description**: Code appears directly after the product type in Japanese katakana, without color or dash.
+### Pattern 4: Model Number from Description Field ✅
+**Description**: Extract model numbers (型番) from the product description field.
 
-**Structure**: `Brand・Product [CODE]・Category・Details`
+**Structure**: Text containing `【型番】` followed by the model number
 
 **Examples**:
 ```
-COMME des GARCONS・COMME des GARCONS COMME des GARCONS 2001124G0044・ローファー・オックスフォード・白・23cm
-                                                        └─ Code: 2001124G0044
+Example 1:
+Description: "【型番】4M00160"
+Extract: 4M00160
+
+Example 2:
+Description: "【型番】\nクレドール　シグノ\nGSWE982"
+Extract: GSWE982
 ```
 
-**Regex Pattern**: `([ァ-ヶー]+)\s+(\d{7}[A-Z]\d{4})・`
+**Regex Pattern**: `【型番】[^\n]*?\n?([A-Z0-9]+)`
+
+**Note**: Unlike Patterns 1-3 which have a fixed 12-character format, model numbers from descriptions have variable length.
 
 ---
 
@@ -106,6 +117,7 @@ Tiffany & Co・TIFFANY&Co. アトラス リング・指輪・指輪・リング�
 
 ## Code Position Analysis
 
+### For original_name (Patterns 1-3)
 All product codes appear in the **second segment** of the original_name field (between the first and second ・ separator):
 
 ```
@@ -115,6 +127,9 @@ Brand ・ [Second Segment with CODE] ・ Category ・ Details ・ Size
 ```
 
 No codes were found in other segments.
+
+### For description (Pattern 4)
+Model numbers are located after the `【型番】` marker in the description field, which may appear anywhere in the description text.
 
 ---
 
@@ -131,34 +146,42 @@ The current extraction logic is missing Pattern 3 (Code After Size Information).
 
 **Estimated Impact**: Approximately 15-20% of products with codes may be missed.
 
-### 2. Suggested Combined Regex Pattern
+### 2. Suggested Regex Patterns
 
-To capture all 4 patterns in a single regex:
-
+**For original_name (Patterns 1-3)**:
 ```regex
-(?:
-  (?:EU\d+[^)]*\))\s+(\d{7}[A-Z]\d{4})・ |  # Pattern 3: After size
-  -\s+(\d{7}[A-Z]\d{4})・ |                # Pattern 2: After dash
-  ([^\s]+)\s+(\d{7}[A-Z]\d{4})・           # Pattern 1 & 4: After color/product
-)
+(?:EU\d+[^)]*\))\s+(\d{7}[A-Z]\d{4})・|  # Pattern 3: After size
+-\s+(\d{7}[A-Z]\d{4})・|                 # Pattern 2: After dash
+\s+(\d{7}[A-Z]\d{4})・                   # Pattern 1: After color
+```
+
+**For description (Pattern 4)**:
+```regex
+【型番】[^\n]*?\n?([A-Z0-9]+)
 ```
 
 ### 3. Extraction Strategy
 
-Recommended order of pattern matching:
+**For original_name**:
 1. Try Pattern 3 first (most specific - with size)
 2. Try Pattern 2 (with dash)
-3. Try Pattern 1/4 (general case)
+3. Try Pattern 1 (after color)
+
+**For description**:
+- Search for `【型番】` marker and extract the following alphanumeric code
 
 ---
 
 ## Test Cases
 
-### Should Extract Code:
+### Should Extract Code from original_name:
 1. ✅ `3.1 Phillip Lim ブーツ ゴールド 2020324D0039・` → `2020324D0039`
 2. ✅ `3.1 Phillip Lim クラッチバッグ - 2020324A0037・` → `2020324A0037`
 3. ⚠️ `A.P.C. ブーツ 黒 EU36(22.5cm位) 0272224O0031・` → `0272224O0031` (CURRENTLY MISSING)
-4. ✅ `COMME des GARCONS 2001124G0044・` → `2001124G0044`
+
+### Should Extract Code from description:
+4. ✅ `【型番】4M00160` → `4M00160`
+5. ✅ `【型番】\nクレドール　シグノ\nGSWE982` → `GSWE982`
 
 ### Should NOT Extract Code (No Code Present):
 1. ✅ `PRADA ハンドバッグ・ハンドバッグ・レッド・ONE SIZE`
@@ -177,4 +200,10 @@ Recommended order of pattern matching:
 
 ## Conclusion
 
-The current extraction logic appears to cover **3 out of 4 patterns**. The missing **Pattern 3** (Code After Size Information) is a significant gap that should be addressed to ensure complete product code extraction.
+The current extraction logic appears to cover **2 out of 4 patterns**:
+- ✅ Pattern 1 (Code After Color) - Covered
+- ✅ Pattern 2 (Code After Dash) - Covered
+- ⚠️ **Pattern 3 (Code After Size Information) - MISSING** - Significant gap affecting ~15-20% of coded items
+- ✅ Pattern 4 (Model Number from Description) - Separate extraction logic needed
+
+The missing **Pattern 3** (Code After Size Information) is a significant gap in `original_name` extraction that should be addressed to ensure complete product code extraction.
